@@ -1,0 +1,301 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>视界</title>
+<style>
+:root{
+  --bg:#080b0d;
+  --chrome:rgba(12,19,21,.86);
+  --panel:#101a1d;
+  --line:#2b3d41;
+  --text:#e9f2f2;
+  --muted:#90a6a8;
+  --accent:#8de4ce;
+  --accent-ink:#0b2723;
+  --radius:8px;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);color:var(--text);
+  font:14px/1.45 "Segoe UI","Microsoft YaHei UI",system-ui,sans-serif;color-scheme:dark}
+button,select{font:inherit;color:inherit;background:#1b2a2e;border:1px solid var(--line);
+  border-radius:6px;padding:4px 10px;cursor:pointer}
+button:hover,select:hover{background:#24373c;border-color:#41605f}
+button:focus-visible,select:focus-visible,#seek:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+button:focus:not(:focus-visible){outline:none}
+input{accent-color:var(--accent)}
+small{font-size:12px}
+
+main{position:fixed;inset:0;overflow:hidden;background:var(--bg)}
+#stage{position:absolute;inset:0;display:grid;grid-auto-flow:column;
+  grid-auto-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr);gap:2px;background:#000;
+  touch-action:none}
+main.can-scrub #stage{cursor:ew-resize}
+#stage.many{grid-auto-flow:row;grid-template-columns:repeat(var(--cols,2),minmax(0,1fr));
+  grid-template-rows:repeat(var(--rows,2),minmax(0,1fr))}
+article{position:relative;min-width:0;min-height:0;overflow:hidden;background:#05080a;border-radius:var(--radius)}
+article[hidden]{display:none}
+video,article img{display:block;width:100%;height:100%;object-fit:contain;background:#05080a}
+main.mode-cover video,main.mode-cover article img{object-fit:cover}
+
+main.mode-flip #stage article{display:none}
+main.mode-flip #stage article.flip-active:not([hidden]){display:block}
+main.mode-overlay #stage{display:block}
+main.mode-overlay #stage article{position:absolute;inset:0;display:none;border-radius:0;background:transparent}
+main.mode-overlay #stage article.diff-base,
+main.mode-overlay #stage article.diff-top{display:block}
+main.mode-overlay #stage video,
+main.mode-overlay #stage article img{background:transparent}
+main.mode-overlay #stage article.diff-base{z-index:1}
+main.mode-overlay #stage article.diff-top{z-index:2}
+main.mode-overlay.overlay-opacity #stage article.diff-top{opacity:var(--diff-opacity,.5)}
+main.mode-overlay.overlay-wipe #stage article.diff-top{clip-path:inset(0 0 0 var(--wipe,50%))}
+
+.card-head{position:absolute;top:46px;left:8px;display:flex;align-items:center;gap:6px;
+  font-size:12px;color:#e2eeee;pointer-events:none;opacity:0;
+  text-shadow:0 1px 4px rgba(0,0,0,.85);transition:opacity .15s}
+article:hover .card-head,article:focus-within .card-head{opacity:1;pointer-events:auto}
+.sort-handle{cursor:grab;user-select:none;padding:1px 9px;border-radius:999px;
+  background:rgba(14,26,29,.9);border:1px solid var(--line);font-weight:500}
+.sort-handle:active{cursor:grabbing}
+article.dragging{opacity:.55}
+article.drop-target{outline:2px solid var(--accent);outline-offset:-2px}
+.card-msg{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);margin:0;
+  padding:4px 10px;border-radius:999px;background:rgba(8,14,16,.8);color:var(--muted);
+  font-size:12px;font-style:normal;text-align:center;pointer-events:none}
+.card-msg:empty{display:none}
+
+#empty{position:absolute;inset:0;margin:0;display:none;flex-direction:column;
+  align-items:center;justify-content:center;gap:8px;padding:24px;
+  color:var(--muted);text-align:center;font-size:15px;pointer-events:none}
+main.is-empty #empty{display:flex}
+
+.chrome{position:fixed;z-index:3;transition:opacity .18s ease,transform .18s ease}
+.bar{background:var(--chrome);backdrop-filter:blur(14px);border:1px solid #ffffff14;
+  box-shadow:0 14px 40px rgba(0,0,0,.5)}
+
+#topbar{top:8px;left:8px;right:8px;display:flex;align-items:center;gap:8px;padding:5px 10px;border-radius:12px}
+.brand{margin-right:2px;font-size:15px;white-space:nowrap}
+.brand small{color:var(--muted);font-size:10px;margin-left:2px}
+#chips{flex:1;min-width:0;display:flex;align-items:center;gap:5px;overflow-x:auto;
+  scrollbar-width:none;padding:1px 0}
+#chips::-webkit-scrollbar{display:none}
+.chip{display:inline-flex;align-items:center;gap:6px;flex:none;padding:1px 8px;border-radius:999px;
+  background:#15332d;border-color:#3d7a6c;color:#d6f4ec;font-size:12px}
+.chip b{font-weight:600}
+.chip span{color:#7fbbb0;font-size:11px}
+.chip:hover{background:#1d4740;border-color:#5daf9d}
+.chip:hover span{color:#bfeadf}
+.top-actions{display:flex;align-items:center;gap:5px;flex:none}
+.mini{font-size:12px;padding:2px 9px;border-radius:6px;white-space:nowrap}
+#pick-toggle[aria-expanded="true"]{background:#1d4740;border-color:#5daf9d}
+#fit-toggle{min-width:62px}
+#keys{font-size:14px;line-height:1}
+
+.seg{display:inline-flex;align-items:center;gap:2px;padding:2px;border-radius:9px;
+  background:#121b1e;border:1px solid #26363a;flex:none}
+.seg button{border:0;border-radius:7px;background:transparent;padding:3px 9px;font-size:12px;
+  color:var(--muted);transition:background .12s,color .12s}
+.seg button:hover{background:#1a272a;color:#cfe3e3}
+.seg button.on{background:#1d3a35;color:#dff7f0;box-shadow:inset 0 0 0 1px #2f5a51}
+.seg button:disabled{opacity:.35;cursor:default}
+#mode-seg button{padding:3px 8px}
+
+#overlay-box[hidden]{display:none}
+#overlay-box{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);flex:none}
+#diff-range{width:120px;height:16px;margin:0}
+#diff-label{color:#cfe3e3;font-size:12px;white-space:nowrap}
+
+#flip-hint{position:fixed;left:50%;top:46px;transform:translateX(-50%);z-index:2;
+  padding:2px 10px;border-radius:999px;background:rgba(12,19,21,.82);
+  border:1px solid var(--line);font-size:12px;color:#cfe3e3;pointer-events:none}
+#flip-hint[hidden]{display:none}
+
+#wipe-line{position:fixed;top:0;bottom:0;left:50%;width:22px;margin-left:-11px;z-index:2;display:none;
+  cursor:ew-resize;touch-action:none}
+#wipe-line::after{content:"";position:absolute;top:0;bottom:0;left:50%;width:2px;margin-left:-1px;
+  background:var(--accent);box-shadow:0 0 10px rgba(0,0,0,.8)}
+main.mode-overlay.overlay-wipe #wipe-line{display:block}
+main.mode-overlay.overlay-wipe #diff-range{display:none}
+
+#dock{left:0;right:0;bottom:0;display:flex;justify-content:center;padding:0 8px 6px;pointer-events:none}
+#dock .dock-panel{pointer-events:auto;width:min(1560px,100%);display:flex;flex-direction:column;
+  gap:1px;padding:2px 16px 4px;border-radius:12px}
+.dock-row{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:10px}
+.meta{display:flex;align-items:center;gap:8px;min-width:0;font-size:11px;color:var(--muted);
+  white-space:nowrap;overflow:hidden}
+#group{color:#dff7f0;font-weight:600;background:#16302b;border:1px solid #274a43;
+  padding:1px 8px;border-radius:999px;font-size:11px}
+#group:empty{display:none}
+#time{font-variant-numeric:tabular-nums;color:var(--accent);overflow:hidden;text-overflow:ellipsis}
+#status{justify-self:end;font-size:11px;color:#ffb3a4;white-space:nowrap;overflow:hidden;
+  text-overflow:ellipsis;max-width:100%}
+#timeline{display:flex;flex-direction:column}
+#seek{position:relative;height:20px;margin:0;cursor:pointer;touch-action:none;outline-offset:4px}
+#seek::before{content:"";position:absolute;left:0;right:0;top:50%;height:6px;margin-top:-3px;
+  border-radius:999px;background:#2c3f43;transition:background .15s}
+#seek:hover::before{background:#3a5357}
+#seek-fill{position:absolute;left:0;top:50%;height:6px;margin-top:-3px;border-radius:999px;
+  background:var(--accent);width:0}
+#seek-thumb{position:absolute;top:50%;left:0;width:16px;height:16px;margin:-8px 0 0 -8px;
+  border-radius:50%;background:var(--accent);border:2px solid #0a1a17;
+  box-shadow:0 0 0 1px rgba(0,0,0,.55),0 2px 6px rgba(0,0,0,.5);
+  transition:transform .1s,width .1s,height .1s,margin .1s}
+#seek:hover #seek-thumb,#seek.dragging #seek-thumb{width:18px;height:18px;margin:-9px 0 0 -9px}
+#seek.disabled{opacity:.45;pointer-events:none;cursor:default}
+#seek.disabled #seek-fill{background:#5b6f70}
+#seek.disabled #seek-thumb{background:#5b6f70}
+#ruler{position:relative;height:18px;margin:0 8px;color:var(--muted);font-size:10px;line-height:12px}
+#ruler i{position:absolute;top:0;height:4px;border-left:1px solid #4a6062}
+#ruler i.major{height:8px;border-color:#8fa8a8}
+#ruler span{position:absolute;top:9px;transform:translateX(-50%);white-space:nowrap;font-style:normal}
+#ruler i:first-child span{transform:none}
+#ruler i:last-child span{transform:translateX(-100%)}
+.controls{display:flex;align-items:center;justify-content:center;gap:4px}
+.controls .sep{width:1px;height:18px;background:var(--line);margin:0 3px;flex:none}
+.controls label{display:flex;align-items:center;gap:5px;font-size:12px;color:var(--muted)}
+.speed select{padding:2px 6px;border-radius:6px}
+button.icon{width:32px;height:30px;padding:0;display:inline-flex;align-items:center;justify-content:center}
+button.icon svg{width:16px;height:16px;fill:currentColor;display:block}
+#play{width:40px;background:var(--accent);border-color:transparent;color:var(--accent-ink)}
+#play:hover{background:#a6efdc}
+#play .i-pause{display:none}
+#play.is-playing .i-play{display:none}
+#play.is-playing .i-pause{display:block}
+
+main.idle-top #topbar{opacity:0;transform:translateY(-10px);pointer-events:none}
+main.idle-bottom #dock{opacity:0;transform:translateY(10px)}
+main.idle-bottom #dock .dock-panel{pointer-events:none}
+main.fs.idle-top.idle-bottom{cursor:none}
+
+#panel{position:fixed;top:56px;right:8px;z-index:4;width:min(380px,calc(100vw - 16px));
+  max-height:calc(100% - 76px);overflow:auto;padding:10px 12px 12px;border-radius:12px;
+  background:var(--panel);border:1px solid var(--line);box-shadow:0 20px 60px rgba(0,0,0,.6)}
+#panel[hidden]{display:none}
+#panel>header{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+#panel>header b{margin-right:auto;font-size:13px}
+.picker-group{display:flex;flex-direction:column;gap:6px;margin-bottom:10px}
+.picker-group>b{font-size:11px;font-weight:600;letter-spacing:.08em;color:#7f989a}
+.picker-group>div{display:grid;grid-template-columns:repeat(auto-fill,minmax(112px,1fr));gap:4px}
+.picker-group>div:empty::after{content:"无";color:#54686a;font-size:12px;padding:2px 4px}
+#panel label{display:flex;align-items:center;gap:7px;padding:5px 8px;border-radius:6px;
+  border:1px solid #223236;background:#131f22;cursor:pointer;font-size:12px}
+#panel label:hover{border-color:#3d5b5a}
+#panel label:has(:checked){background:#15332d;border-color:#4e9384;color:#dff7f0}
+#panel label input{width:14px;height:14px;flex:none;margin:0}
+#panel .hint{margin:2px 0 0;color:#6e8587;font-size:11px}
+
+#keys-dialog{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:7;
+  width:min(430px,calc(100vw - 24px));max-height:min(72vh,580px);display:flex;flex-direction:column;
+  padding:12px 14px;border-radius:12px;background:var(--panel);border:1px solid var(--line);
+  box-shadow:0 24px 70px rgba(0,0,0,.7)}
+#keys-dialog[hidden]{display:none}
+#keys-dialog>header{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+#keys-dialog>header b{margin-right:auto;font-size:13px}
+#keys-list{overflow:auto;display:flex;flex-direction:column;gap:4px;padding-right:4px}
+.key-row{display:flex;align-items:center;gap:10px;padding:3px 2px;font-size:12px}
+.key-row span{flex:1;color:#cfe3e3}
+.key-btn{display:inline-flex;align-items:center;justify-content:center;min-width:104px;
+  font-family:ui-monospace,Consolas,monospace;font-size:12px;padding:3px 8px}
+.key-btn.capturing{background:#1d4740;border-color:#5daf9d;color:#d6f4ec}
+#keys-dialog>footer{display:flex;align-items:center;gap:10px;margin-top:10px}
+#keys-hint{color:var(--muted);font-size:11px}
+
+@media(max-width:820px){
+  .brand{display:none}
+  .mini{padding:2px 7px}
+  #dock .dock-panel{width:100%}
+  .dock-row{grid-template-columns:1fr;justify-items:center;gap:3px}
+  .meta{justify-content:center}
+  #status{justify-self:center}
+  .controls{gap:4px}
+  button,select{padding:3px 8px}
+  button.icon{padding:0}
+  #fit-toggle{min-width:0}
+}
+</style>
+</head>
+<body>
+<main id="app" class="idle-top idle-bottom is-empty">
+  <section id="stage" aria-label="对比画面"></section>
+  <div id="flip-hint" hidden></div>
+  <div id="wipe-line" aria-hidden="true"></div>
+  <p id="empty"><span>从右上角「素材」选择要对比的视频或图片</span><small>鼠标移到屏幕上方或下方区域可显示控件</small></p>
+
+  <header id="topbar" class="chrome bar">
+    <strong class="brand">视界 <small>0.9.3</small></strong>
+    <div id="chips" role="group" aria-label="已选素材"></div>
+    <div class="top-actions">
+      <button id="all" class="mini" title="全选 (A)">全选</button>
+      <button id="none" class="mini" title="清空选择">清空</button>
+      <button id="scan" class="mini" title="重新抓取来源页素材">重抓</button>
+      <button id="pick-toggle" class="mini" aria-expanded="false" aria-controls="panel">素材 <span id="pick-count">0/0</span> ▾</button>
+      <button id="fit-toggle" class="mini" title="当前：完整显示">适应</button>
+      <button id="fullscreen" class="mini" title="全屏 (F)">⛶</button>
+      <button id="keys" class="mini" title="快捷键设置" aria-label="快捷键设置">⚙</button>
+      <button id="close" class="mini" title="关闭预览">✕</button>
+    </div>
+  </header>
+
+  <footer id="dock" class="chrome">
+    <div class="dock-panel bar">
+      <div id="timeline">
+        <div id="seek" role="slider" tabindex="0" aria-label="按帧定位" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0" title="拖动按帧定位，可用 ← → 微调">
+          <div id="seek-fill"></div>
+          <div id="seek-thumb"></div>
+        </div>
+        <div id="ruler" aria-hidden="true"></div>
+      </div>
+      <div class="dock-row">
+        <div class="meta"><span id="group"></span><small id="time"></small></div>
+        <div class="controls">
+          <label class="speed">速度<select id="rate"></select></label>
+          <span class="sep" aria-hidden="true"></span>
+          <button id="zero" class="icon" title="回到起点" aria-label="回到起点">
+            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 3h2v10H3z"/><path d="M13.5 3v10L5.8 8z"/></svg>
+          </button>
+          <button id="prev" class="icon" title="上一帧 (←)" aria-label="上一帧">
+            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M11.5 3v10L4 8z"/></svg>
+          </button>
+          <button id="play" class="icon" title="播放 / 暂停 (空格)" aria-label="播放">
+            <svg class="i-play" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2.6l9.5 5.4L4 13.4z"/></svg>
+            <svg class="i-pause" viewBox="0 0 16 16" aria-hidden="true"><rect x="4" y="3" width="3" height="10" rx="1"/><rect x="9" y="3" width="3" height="10" rx="1"/></svg>
+          </button>
+          <button id="next" class="icon" title="下一帧 (→)" aria-label="下一帧">
+            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 3v10L12 8z"/></svg>
+          </button>
+          <div class="seg" id="mode-seg" role="group" aria-label="对比方式">
+            <button type="button" data-mode="grid" class="on" title="并排 (1)">并排</button>
+            <button type="button" data-mode="flip" title="交替 (2 / C)">交替</button>
+            <button type="button" data-mode="opacity" title="透明度叠加 (3 / D)">透明度</button>
+            <button type="button" data-mode="wipe" title="滑动对比 Wipe (4)">滑动对比</button>
+          </div>
+          <div id="overlay-box" hidden>
+            <input id="diff-range" type="range" min="0" max="100" value="50" aria-label="透明度">
+            <small id="diff-label"></small>
+          </div>
+        </div>
+        <small id="status" role="status"></small>
+      </div>
+    </div>
+  </footer>
+
+  <aside id="panel" aria-label="选择对比素材" hidden>
+    <header><b>选择对比素材</b><button id="panel-close">完成</button></header>
+    <div class="picker-group"><b>视频</b><div id="video-picks"></div></div>
+    <div class="picker-group"><b>图片</b><div id="img-picks"></div></div>
+    <p class="hint">勾选后立即出现在画面上；拖动画面左上角手柄可调整顺序。</p>
+  </aside>
+
+  <div id="keys-dialog" aria-label="快捷键设置" hidden>
+    <header><b>快捷键设置</b><button id="keys-close">完成</button></header>
+    <div id="keys-list"></div>
+    <footer>
+      <button id="keys-reset">恢复默认</button>
+      <small id="keys-hint">点按键后按新键；Esc 取消，Backspace 清除</small>
+    </footer>
+  </div>
+</main>
+<script src="preview.js"></script>
+</body>
+</html>
